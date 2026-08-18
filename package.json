@@ -2,13 +2,22 @@
   "name": "ask-permission",
   "version": "0.1.0",
   "description": "Pi plugin: ask before running specific commands like git or rm",
-  "keywords": ["pi-package", "ask-permission", "permission", "bash", "safety"],
+  "keywords": [
+    "pi-package",
+    "ask-permission",
+    "permission",
+    "bash",
+    "safety"
+  ],
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc"
   },
   "pnpm": {
-    "ignoredBuiltDependencies": ["@google/genai", "protobufjs"]
+    "ignoredBuiltDependencies": [
+      "@google/genai",
+      "protobufjs"
+    ]
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -19,6 +28,11 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./extensions/ask-permission.ts"]
+    "extensions": [
+      "./extensions/ask-permission.ts"
+    ]
+  },
+  "dependencies": {
+    "bash-parser": "^0.5.0"
   }
 }
