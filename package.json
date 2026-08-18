@@ -4,6 +4,17 @@
   "description": "Pi plugin: ask before running specific commands like git or rm",
   "keywords": ["pi-package", "ask-permission", "permission", "bash", "safety"],
   "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": ["@google/genai", "protobufjs"]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@types/node": "^22",
+    "typescript": "^5"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },

@@ -34,6 +34,11 @@ confirmed, a dialog is shown asking for permission:
 - **Decline** → the command is blocked.
 - **No UI** (headless/automation) → fails closed and blocks by default.
 
+Compound commands are split on `&&`, `||`, `;`, `|`, and newlines, and each
+segment is checked independently. This matters because agents usually run git
+commands with a `cd` prefix — e.g. `cd /path && git push` — which must still be
+caught (matching only the first word of the whole string would miss it).
+
 ## Configuration
 
 Optional JSON file at `~/.pi/agent/ask-permission.json`:
@@ -60,10 +65,11 @@ Optional JSON file at `~/.pi/agent/ask-permission.json`:
 
 There are two ways to list things in `confirmCommands`:
 
-- **Plain word** (`"rm"`, `"git"`): matches the command's **first word** exactly.
-  It cannot see what comes after, so it captures *all* subcommands under that
-  tool. `"rm"` == `"rm *"` — both ask for every command that starts with `rm`.
-- **Glob** (`"git push *"`): matches against the **start of the whole command**,
+- **Plain word** (`"rm"`, `"git"`): matches the **first word** of any command
+  segment. It cannot see what comes after, so it captures *all* subcommands
+  under that tool. `"rm"` == `"rm *"` — both ask for every command that
+  starts with `rm`.
+- **Glob** (`"git push *"`): matches against the **start of a command segment**,
   so it can narrow to a specific subcommand. A trailing `*` also matches the
   bare word alone (e.g. `"git *"` matches a bare `git`).
 

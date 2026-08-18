@@ -1,0 +1,6 @@
+# Never run postinstall build scripts for these transitive deps of
+# @earendil-works/pi-coding-agent (they pull native/network tooling we
+# don't need). Mirrors the `pnpm.ignoredBuiltDependencies` in package.json.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false

@@ -23,6 +23,7 @@
  * /reload inside pi to pick up edits without restarting.
  */
 
+import { appendFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,32 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "ask-permission.json");
+
+// Diagnostic logger: records every decision this plugin makes, so you can
+// audit what/when it prompted and why. Each line gets a timestamp (ISO + local)
+// and, when available, the session id.
+const LOG_PATH = join(homedir(), ".pi", "agent", "ask-permission.log");
+function diag(line: string, sessionId?: string) {
+	try {
+		const now = new Date();
+		const stamp = `${now.toISOString()} ${now.toLocaleString()}`;
+		const sid = sessionId ? ` session=${sessionId}` : "";
+		appendFileSync(LOG_PATH, `[${stamp}]${sid} ${line}\n`);
+	} catch {
+		/* ignore */
+	}
+}
+
+// Safely pull the current session id from any context that has one.
+function sessionIdOf(ctx: {
+	sessionManager?: { getSessionId?: () => string | undefined };
+}): string | undefined {
+	try {
+		return ctx.sessionManager?.getSessionId?.() ?? undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 interface Config {
 	confirmCommands: string[];
@@ -90,6 +117,17 @@ function globToRegExp(glob: string): RegExp {
 	return new RegExp("^" + re, "i");
 }
 
+// Split a compound shell command into its logical commands so we can match
+// against each one. Git/rm are almost always invoked with a prefix like
+// `cd <dir> && git push`, so matching only the whole-command first word would
+// miss them. Separators: `&&`, `||`, `;`, `|`, and newlines.
+function commandSegments(command: string): string[] {
+	return command
+		.split(/\s*(?:&&|;|\|){1,2}\s*|\n/)
+		.map((s) => s.trim().replace(/^[({]|[)}]$/g, ""))
+		.filter((s) => s.length > 0);
+}
+
 function matchesConfirm(command: string, entry: string): boolean {
 	if (entry.includes("*")) {
 		// e.g. "git *" matches any command starting with "git "; "rm *" likewise.
@@ -103,47 +141,64 @@ function matchesConfirm(command: string, entry: string): boolean {
 function wantsConfirmation(command: string, cfg: Config): boolean {
 	const normalized = command.trim();
 
-	// Skip patterns win — these never trigger a prompt.
-	if (cfg.skipPatterns.some((p) => new RegExp(p, "i").test(normalized))) {
-		return false;
+	// Evaluate each command segment independently so a git/rm buried after a
+	// `cd <dir> &&` prefix is still caught, while read-only segments (e.g.
+	// `git status`) are still skipped.
+	for (const segment of commandSegments(normalized)) {
+		// Skip patterns win per-segment — these never trigger a prompt.
+		if (cfg.skipPatterns.some((p) => new RegExp(p, "i").test(segment))) {
+			continue;
+		}
+		// Confirm if any confirmCommands entry matches this segment.
+		if (cfg.confirmCommands.some((c) => matchesConfirm(segment, c))) {
+			return true;
+		}
+		// Confirm when any risky regex matches anywhere in this segment.
+		if (cfg.patterns.some((p) => new RegExp(p, "i").test(segment))) {
+			return true;
+		}
 	}
 
-	// Confirm if any confirmCommands entry matches.
-	if (cfg.confirmCommands.some((c) => matchesConfirm(normalized, c))) {
-		return true;
-	}
-
-	// Confirm when any risky regex matches anywhere in the command.
-	return cfg.patterns.some((p) => new RegExp(p, "i").test(normalized));
+	return false;
 }
 
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event: ToolCallEvent, ctx) => {
+		const sid = sessionIdOf(ctx);
+		diag(`tool_call fired: tool=${event.toolName} id=${event.toolCallId}`, sid);
 		if (event.toolName !== "bash") return undefined;
 
 		const command = event.input.command as string;
-		if (!wantsConfirmation(command, config)) return undefined;
+		const shouldAsk = wantsConfirmation(command, config);
+		diag(`bash cmd=${JSON.stringify(command)} shouldAsk=${shouldAsk} hasUI=${ctx.hasUI}`, sid);
+		if (!shouldAsk) return undefined;
 
 		if (!ctx.hasUI) {
 			// Fail closed: without a UI there's no way to ask, so block.
 			if (config.blockWhenNoUI) {
+				diag("no UI -> BLOCKED (fail closed)", sid);
 				return {
 					block: true,
 					reason: "No UI to confirm command: " + command,
 				};
 			}
+			diag("no UI -> allowed silently (blockWhenNoUI=false)", sid);
 			return undefined; // blockWhenNoUI === false => allow silently
 		}
 
+		diag("UI present -> showing confirm dialog", sid);
 		const ok = await ctx.ui.confirm(
 			"Run this command?",
 			`Pi wants to run:\n\n${command}\n\nAllow it?`,
 		);
+		diag(`confirm returned ok=${ok}`, sid);
 
 		if (!ok) {
+			diag("declined -> BLOCKED", sid);
 			return { block: true, reason: "Command declined by user" };
 		}
 
+		diag("allowed", sid);
 		return undefined;
 	});
 
