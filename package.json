@@ -1,0 +1,13 @@
+{
+  "name": "ask-permission",
+  "version": "0.1.0",
+  "description": "Pi plugin: ask before running specific commands like git or rm",
+  "keywords": ["pi-package", "ask-permission", "permission", "bash", "safety"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions/ask-permission.ts"]
+  }
+}
